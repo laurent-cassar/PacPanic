@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QCM — PAC-PANIC × UNITY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+  :root {
+    --yellow: #FFE000;
+    --black: #0a0a0a;
+    --ghost-red: #FF0000;
+    --ghost-pink: #FFB8FF;
+    --ghost-cyan: #00FFFF;
+    --ghost-orange: #FFB852;
+    --correct: #39FF14;
+    --wrong: #FF2020;
+    --grid: #1a1a1a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--black);
+    color: var(--yellow);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Maze grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(26,26,90,0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(26,26,90,0.3) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Pellets scattered */
+  body::after {
+    content: '· · · · · · · · · · · · · · · · · · · ·';
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    color: rgba(255,224,0,0.08);
+    font-size: 2rem;
+    letter-spacing: 2rem;
+    line-height: 3rem;
+    word-break: break-all;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* HEADER */
+  header {
+    text-align: center;
+    padding: 2rem 0 2.5rem;
+  }
+
+  .pac-sprite {
+    font-size: 3.5rem;
+    display: inline-block;
+    animation: chomp 0.4s steps(2) infinite;
+    filter: drop-shadow(0 0 16px var(--yellow));
+  }
+
+  @keyframes chomp {
+    0%   { content: ''; }
+    50%  { transform: scaleX(0.8); }
+    100% { transform: scaleX(1); }
+  }
+
+  h1 {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(0.9rem, 3vw, 1.3rem);
+    color: var(--yellow);
+    letter-spacing: 0.05em;
+    margin-top: 0.8rem;
+    text-shadow: 3px 3px 0 #b8a000, 0 0 30px rgba(255,224,0,0.4);
+    line-height: 1.8;
+  }
+
+  .subtitle {
+    font-size: 0.65rem;
+    color: var(--ghost-cyan);
+    margin-top: 0.8rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-family: 'Press Start 2P', monospace;
+  }
+
+  /* SCORE BAR */
+  .scorebar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255,224,0,0.05);
+    border: 2px solid rgba(255,224,0,0.2);
+    border-radius: 4px;
+    padding: 0.7rem 1.2rem;
+    margin-bottom: 2rem;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.6rem;
+  }
+
+  .score-item { text-align: center; }
+  .score-label { color: rgba(255,224,0,0.4); margin-bottom: 4px; }
+  .score-val { color: var(--yellow); font-size: 0.9rem; }
+  #progress-bar-wrap {
+    flex: 1; margin: 0 1rem;
+    height: 8px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--yellow), var(--ghost-orange));
+    border-radius: 4px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+
+  /* QUESTION CARD */
+  .question-card {
+    background: rgba(10,10,40,0.85);
+    border: 2px solid rgba(0,255,255,0.25);
+    border-radius: 6px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    box-shadow: 0 0 40px rgba(0,255,255,0.05), inset 0 0 40px rgba(0,0,0,0.4);
+    animation: slideIn 0.35s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity:0; transform: translateY(12px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  .q-number {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.55rem;
+    color: var(--ghost-cyan);
+    letter-spacing: 0.15em;
+    margin-bottom: 0.8rem;
+    opacity: 0.7;
+  }
+
+  .q-category {
+    display: inline-block;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.45rem;
+    padding: 3px 8px;
+    border-radius: 2px;
+    margin-bottom: 1rem;
+    letter-spacing: 0.05em;
+  }
+
+  .cat-debug   { background: rgba(255,0,0,0.2);   color: var(--ghost-red);    border: 1px solid var(--ghost-red); }
+  .cat-code    { background: rgba(0,255,255,0.1);  color: var(--ghost-cyan);   border: 1px solid var(--ghost-cyan); }
+  .cat-eval    { background: rgba(255,184,255,0.1);color: var(--ghost-pink);   border: 1px solid var(--ghost-pink); }
+  .cat-nav     { background: rgba(255,184,82,0.1); color: var(--ghost-orange); border: 1px solid var(--ghost-orange); }
+  .cat-hist    { background: rgba(57,255,20,0.1);  color: var(--correct);      border: 1px solid var(--correct); }
+
+  .q-text {
+    font-size: 0.9rem;
+    line-height: 1.75;
+    color: #f0f0f0;
+    margin-bottom: 1.5rem;
+  }
+
+  .q-text code {
+    font-family: 'IBM Plex Mono', monospace;
+    background: rgba(255,224,0,0.08);
+    border: 1px solid rgba(255,224,0,0.2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.85em;
+    color: var(--yellow);
+  }
+
+  pre {
+    background: rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-left: 3px solid var(--ghost-cyan);
+    padding: 0.9rem 1rem;
+    border-radius: 4px;
+    margin: 0.8rem 0 1.2rem;
+    overflow-x: auto;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: #c8e6c9;
+    white-space: pre;
+  }
+
+  /* OPTIONS */
+  .options { display: grid; gap: 0.7rem; }
+
+  .option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.8rem 1rem;
+    background: rgba(255,255,255,0.03);
+    border: 2px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: #ccc;
+  }
+
+  .option:hover:not(.locked) {
+    border-color: var(--yellow);
+    background: rgba(255,224,0,0.06);
+    color: var(--yellow);
+    transform: translateX(4px);
+  }
+
+  .option.selected { border-color: var(--yellow); background: rgba(255,224,0,0.1); color: var(--yellow); }
+  .option.correct  { border-color: var(--correct) !important; background: rgba(57,255,20,0.1) !important; color: var(--correct) !important; }
+  .option.wrong    { border-color: var(--wrong) !important;   background: rgba(255,32,32,0.1) !important;  color: var(--wrong) !important; opacity:0.8; }
+  .option.locked   { cursor: default; }
+
+  .opt-letter {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.55rem;
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+    padding: 3px 6px;
+    min-width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* FEEDBACK */
+  .feedback {
+    margin-top: 1rem;
+    padding: 0.8rem 1rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    display: none;
+  }
+
+  .feedback.show { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+  .feedback.correct-fb {
+    background: rgba(57,255,20,0.08);
+    border: 1px solid rgba(57,255,20,0.3);
+    color: var(--correct);
+  }
+  .feedback.wrong-fb {
+    background: rgba(255,32,32,0.08);
+    border: 1px solid rgba(255,32,32,0.3);
+    color: #ff8080;
+  }
+
+  .feedback-icon { font-size: 1rem; margin-right: 6px; }
+
+  /* BUTTONS */
+  .btn-row {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.6rem;
+    padding: 0.7rem 1.4rem;
+    border: 2px solid var(--yellow);
+    background: transparent;
+    color: var(--yellow);
+    cursor: pointer;
+    border-radius: 4px;
+    letter-spacing: 0.08em;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn:hover {
+    background: var(--yellow);
+    color: var(--black);
+    box-shadow: 0 0 20px rgba(255,224,0,0.4);
+  }
+
+  .btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    border-color: var(--ghost-cyan);
+    color: var(--ghost-cyan);
+  }
+  .btn-ghost:hover {
+    background: var(--ghost-cyan);
+    color: var(--black);
+    box-shadow: 0 0 20px rgba(0,255,255,0.4);
+  }
+
+  /* RESULT SCREEN */
+  #result-screen {
+    display: none;
+    text-align: center;
+    padding: 3rem 1rem;
+    animation: slideIn 0.4s ease;
+  }
+
+  .result-ghost {
+    font-size: 5rem;
+    display: block;
+    margin-bottom: 1rem;
+    animation: float 2s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px currentColor);
+  }
+
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+  }
+
+  .result-score {
+    font-family: 'Press Start 2P', monospace;
+    font-size: clamp(2rem, 8vw, 3.5rem);
+    color: var(--yellow);
+    text-shadow: 4px 4px 0 #b8a000;
+    margin: 0.5rem 0;
+  }
+
+  .result-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.7rem;
+    color: var(--ghost-cyan);
+    letter-spacing: 0.1em;
+    margin-bottom: 2rem;
+  }
+
+  .result-breakdown {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: left;
+  }
+
+  .breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 0.75rem;
+  }
+  .breakdown-row:last-child { border-bottom: none; }
+  .breakdown-cat { color: #aaa; }
+  .breakdown-stat { font-family: 'Press Start 2P', monospace; font-size: 0.6rem; }
+
+  /* Hidden */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="pac-sprite">🟡</div>
+    <h1>PAC-PANIC<br>QCM UNITY</h1>
+    <div class="subtitle">Unity Certified User : Programmer</div>
+  </header>
+
+  <div class="scorebar">
+    <div class="score-item">
+      <div class="score-label">SCORE</div>
+      <div class="score-val" id="score-display">0</div>
+    </div>
+    <div id="progress-bar-wrap">
+      <div id="progress-bar"></div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">QUESTION</div>
+      <div class="score-val"><span id="q-current">1</span>/<span id="q-total">0</span></div>
+    </div>
+  </div>
+
+  <div id="quiz-area"></div>
+
+  <div id="result-screen">
+    <span class="result-ghost" id="result-emoji">👻</span>
+    <div class="result-score" id="result-score-val">0/0</div>
+    <div class="result-label" id="result-label">GAME OVER</div>
+    <div class="result-breakdown" id="result-breakdown"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="restartQuiz()">▶ REJOUER</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const questions = [
+  // === HISTOIRE / CONTEXTE ===
+  {
+    cat: "hist", catLabel: "🕹 Histoire",
+    q: "Qui a créé Pac-Man et pour quelle entreprise ?",
+    opts: ["Shigeru Miyamoto pour Nintendo","Toru Iwatani pour Namco","Hideo Kojima pour Konami","Yuji Naka pour Sega"],
+    answer: 1,
+    fb: "Pac-Man a été conçu par Toru Iwatani chez Namco en 1980."
+  },
+  {
+    cat: "hist", catLabel: "🕹 Histoire",
+    q: "Quel était le nom original de Pac-Man au Japon ?",
+    opts: ["Waka-Man","Chomp Hero","Puck Man","Gomi Man"],
+    answer: 2,
+    fb: "Son nom original était Puck Man, inspiré du mot japonais \"paku-paku\" (bruit de la bouche)."
+  },
+
+  // === DEBUGGING ===
+  {
+    cat: "debug", catLabel: "🔴 Debugging",
+    q: "Quelle instruction C# permet d'afficher un message dans la console Unity ?",
+    opts: ["Console.WriteLine(\"msg\")","print(\"msg\")","Debug.Log(\"msg\")","Logger.Write(\"msg\")"],
+    answer: 2,
+    fb: "Debug.Log() est la méthode standard pour afficher des messages dans la console Unity."
+  },
+  {
+    cat: "debug", catLabel: "🔴 Debugging",
+    q: `Qu'indique l'erreur suivante dans la console Unity ?
+<pre>NullReferenceException: Object reference not set to an instance of an object
+PlayerController.Update () (at Assets/Scripts/PlayerController.cs:25)</pre>`,
+    opts: [
+      "Une variable de type int vaut 0",
+      "Une variable de type string est vide",
+      "Un objet (référence) est null et on essaie de l'utiliser",
+      "Il manque un point-virgule ligne 25"
+    ],
+    answer: 2,
+    fb: "NullReferenceException signifie qu'une référence d'objet n'a pas été assignée (elle est null) et qu'on tente de l'utiliser."
+  },
+  {
+    cat: "debug", catLabel: "🔴 Debugging",
+    q: "Pour débuguer la valeur d'une variable <code>score</code> dans la console, quelle ligne est correcte ?",
+    opts: [
+      "Debug.Log(score);",
+      "Console.Print(score);",
+      "print >> score;",
+      "Log.Debug(score);"
+    ],
+    answer: 0,
+    fb: "Debug.Log(score); affiche la valeur de la variable score dans la console Unity."
+  },
+
+  // === CREATING CODE — Variables ===
+  {
+    cat: "code", catLabel: "🔵 Creating Code",
+    q: "Quelle déclaration de variable est correcte en C# pour Unity ?",
+    opts: [
+      "var int score = 0;",
+      "int score = 0;",
+      "integer score := 0;",
+      "declare score as int = 0;"
+    ],
+    answer: 1,
+    fb: "En C#, on déclare une variable avec le type suivi du nom : int score = 0;"
+  },
+  {
+    cat: "code", catLabel: "🔵 Creating Code",
+    q: "Quel modificateur rend une variable visible dans l'Inspector Unity mais non accessible depuis d'autres scripts ?",
+    opts: ["public","private","protected","internal"],
+    answer: 1,
+    fb: "Une variable private avec [SerializeField] est visible dans l'Inspector. Sans SerializeField, seul private suffit pour la cacher aux autres scripts. Dans le contexte de base, private la cache."
+  },
+  {
+    cat: "code", catLabel: "🔵 Creating Code",
+    q: "Comment déclare-t-on une liste d'entiers en C# (List) ?",
+    opts: [
+      "List scores = new List();",
+      "List<int> scores = new List<int>();",
+      "int[] scores = new List<int>();",
+      "ArrayList<int> scores = new List();"
+    ],
+    answer: 1,
+    fb: "La syntaxe correcte est List<int> scores = new List<int>(); avec le type générique <int>."
+  },
+  {
+    cat: "code", catLabel: "🔵 Creating Code",
+    q: "Quelle méthode Unity écoute une pression sur la touche espace ?",
+    opts: [
+      "Input.GetButton(\"Space\")",
+      "Input.GetKeyDown(KeyCode.Space)",
+      "Input.KeyPressed(KeyCode.Space)",
+      "Input.OnKeyDown(\"space\")"
+    ],
+    answer: 1,
+    fb: "Input.GetKeyDown(KeyCode.Space) retourne true seulement sur le frame où la touche est pressée."
+  },
+  {
+    cat: "code", catLabel: "🔵 Creating Code",
+    q: "Parmi ces déclarations de fonction, laquelle est correcte en C# Unity ?",
+    opts: [
+      "function Move(float speed) { }",
+      "void Move(float speed) { }",
+      "def Move(speed: float): pass",
+      "Move(float speed) => void { }"
+    ],
+    answer: 1,
+    fb: "En C#, la syntaxe de déclaration est : [type_retour] NomFonction([paramètres]) { ... }. Ici void Move(float speed) { }."
+  },
+
+  // === CREATING CODE — Flow Control ===
+  {
+    cat: "code", catLabel: "🔵 Creating Code",
+    q: "Quel code affiche les chiffres de 0 à 4 dans la console Unity ?",
+    opts: [
+      "for (int i = 0; i <= 4; i++) { Debug.Log(i); }",
+      "for (int i = 1; i < 4; i++) { Debug.Log(i); }",
+      "while (i < 5) { Debug.Log(i); }",
+      "foreach (int i in 5) { Debug.Log(i); }"
+    ],
+    answer: 0,
+    fb: "La boucle for (int i = 0; i <= 4; i++) itère de 0 à 4 inclus, soit 5 itérations."
+  },
+  {
+    cat: "code", catLabel: "🔵 Creating Code",
+    q: "Quel opérateur vérifie l'égalité entre deux valeurs en C# ?",
+    opts: ["=","=>","==","==="],
+    answer: 2,
+    fb: "En C#, == est l'opérateur de comparaison d'égalité. = est l'affectation. === n'existe pas en C#."
+  },
+
+  // === EVALUATING CODE — Events ===
+  {
+    cat: "eval", catLabel: "🟣 Evaluating Code",
+    q: "Dans Unity, quelle fonction d'événement est appelée UNE SEULE FOIS au démarrage du script ?",
+    opts: ["Update()","Awake()","Start()","FixedUpdate()"],
+    answer: 2,
+    fb: "Start() est appelée une seule fois au début, après Awake(). Update() est appelée à chaque frame."
+  },
+  {
+    cat: "eval", catLabel: "🟣 Evaluating Code",
+    q: "Quelle fonction Unity est la plus adaptée pour détecter une collision avec un autre objet physique ?",
+    opts: ["Update()","Start()","OnCollisionEnter(Collision col)","OnMouseDown()"],
+    answer: 2,
+    fb: "OnCollisionEnter est déclenchée automatiquement quand deux objets avec Rigidbody entrent en collision."
+  },
+  {
+    cat: "eval", catLabel: "🟣 Evaluating Code",
+    q: `Quel est le problème dans ce code ?
+<pre>public class PacMan : MonoBehaviour {
+    int score;
+    void Start() {
+        score = 0;
+    }
+    void AddScore() {
+        scor += 10;
+    }
+}</pre>`,
+    opts: [
+      "score n'est pas public",
+      "Start() ne peut pas initialiser score",
+      "scor n'est pas déclaré — faute de frappe, il manque un 'e'",
+      "AddScore() doit retourner un int"
+    ],
+    answer: 2,
+    fb: "scor est une faute de frappe. La variable s'appelle score, donc Unity lèvera une erreur 'scor does not exist in the current context'."
+  },
+  {
+    cat: "eval", catLabel: "🟣 Evaluating Code",
+    q: "Quelle classe est une classe MonoBehaviour ?",
+    opts: [
+      "class ScoreManager { }",
+      "class ScoreManager : MonoBehaviour { }",
+      "class ScoreManager : ScriptableObject { }",
+      "class ScoreManager : Component { }"
+    ],
+    answer: 1,
+    fb: "Pour qu'une classe Unity soit un composant attachable à un GameObject, elle doit hériter de MonoBehaviour."
+  },
+  {
+    cat: "eval", catLabel: "🟣 Evaluating Code",
+    q: "Quelle convention de nommage Unity est correcte ?",
+    opts: [
+      "void move_player() — variable: PlayerScore",
+      "void MovePlayer() — variable: playerScore",
+      "void MovePlayer() — variable: PlayerScore",
+      "void movePlayer() — variable: player_score"
+    ],
+    answer: 1,
+    fb: "Conventions Unity : méthodes en PascalCase (MovePlayer), variables en camelCase (playerScore)."
+  },
+  {
+    cat: "eval", catLabel: "🟣 Evaluating Code",
+    q: `Quel commentaire décrit correctement ce code ?
+<pre>void Update() {
+    if (Input.GetKeyDown(KeyCode.W)) {
+        transform.Translate(Vector3.up * speed);
+    }
+}</pre>`,
+    opts: [
+      "// Déplace l'objet vers le bas quand on appuie sur W",
+      "// Fait pivoter l'objet quand on appuie sur W",
+      "// Déplace l'objet vers le haut quand on appuie sur W",
+      "// Détecte une collision avec la touche W"
+    ],
+    answer: 2,
+    fb: "Vector3.up correspond au mouvement vers le haut (axe Y positif). Le code déplace l'objet vers le haut à chaque frame où W est pressé."
+  },
+
+  // === NAVIGATING INTERFACE ===
+  {
+    cat: "nav", catLabel: "🟠 Interface Unity",
+    q: "Quelle fenêtre Unity affiche tous les GameObjects présents dans la scène active ?",
+    opts: ["Inspector","Project","Hierarchy","Console"],
+    answer: 2,
+    fb: "La Hierarchy liste tous les GameObjects de la scène. L'Inspector affiche leurs propriétés. Le Project montre les assets."
+  },
+  {
+    cat: "nav", catLabel: "🟠 Interface Unity",
+    q: "Dans quelle fenêtre Unity voit-on les messages de Debug.Log() et les erreurs de compilation ?",
+    opts: ["Game","Project","Inspector","Console"],
+    answer: 3,
+    fb: "La Console affiche les logs, warnings et erreurs. C'est l'outil principal de débogage en Unity."
+  },
+  {
+    cat: "nav", catLabel: "🟠 Interface Unity",
+    q: "Pour changer l'éditeur de scripts par défaut dans Unity (ex: passer à VS Code), on va dans :",
+    opts: [
+      "File > Build Settings",
+      "Edit > Preferences > External Tools",
+      "Window > Package Manager",
+      "Assets > Project Settings"
+    ],
+    answer: 1,
+    fb: "Edit > Preferences > External Tools permet de définir l'IDE externe (VS Code, Rider, Visual Studio…)."
+  },
+  {
+    cat: "nav", catLabel: "🟠 Interface Unity",
+    q: "À quoi sert la fenêtre « Game » dans Unity ?",
+    opts: [
+      "Afficher les assets du projet",
+      "Modifier les propriétés d'un GameObject",
+      "Prévisualiser le jeu tel qu'il sera rendu depuis la caméra principale",
+      "Lister les GameObjects de la scène"
+    ],
+    answer: 2,
+    fb: "La fenêtre Game simule le rendu final vu par la caméra. C'est ce que le joueur verra. Elle s'active en cliquant sur Play."
+  },
+];
+
+// Shuffle helper
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+let shuffled = [];
+let current = 0;
+let score = 0;
+let answered = false;
+let categoryStats = {};
+
+function startQuiz() {
+  shuffled = shuffle(questions);
+  current = 0;
+  score = 0;
+  answered = false;
+  categoryStats = {};
+  document.getElementById('q-total').textContent = shuffled.length;
+  document.getElementById('result-screen').style.display = 'none';
+  document.getElementById('quiz-area').style.display = 'block';
+  renderQuestion();
+}
+
+function renderQuestion() {
+  answered = false;
+  const q = shuffled[current];
+  document.getElementById('q-current').textContent = current + 1;
+  document.getElementById('score-display').textContent = score;
+  document.getElementById('progress-bar').style.width = ((current / shuffled.length) * 100) + '%';
+
+  const letters = ['A','B','C','D'];
+  const optsHtml = q.opts.map((opt, i) => `
+    <div class="option" data-index="${i}" onclick="selectOption(this, ${i})">
+      <span class="opt-letter">${letters[i]}</span>
+      <span>${opt}</span>
+    </div>
+  `).join('');
+
+  document.getElementById('quiz-area').innerHTML = `
+    <div class="question-card">
+      <div class="q-number">QUESTION ${current + 1} / ${shuffled.length}</div>
+      <div class="q-category cat-${q.cat}">${q.catLabel}</div>
+      <div class="q-text">${q.q}</div>
+      <div class="options">${optsHtml}</div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="btn-validate" onclick="validate()" disabled>✓ VALIDER</button>
+    </div>
+  `;
+}
+
+let selectedIndex = null;
+
+function selectOption(el, index) {
+  if (answered) return;
+  document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedIndex = index;
+  document.getElementById('btn-validate').disabled = false;
+}
+
+function validate() {
+  if (answered || selectedIndex === null) return;
+  answered = true;
+
+  const q = shuffled[current];
+  const opts = document.querySelectorAll('.option');
+  const fb = document.getElementById('feedback');
+
+  opts.forEach(o => o.classList.add('locked'));
+  opts[q.answer].classList.add('correct');
+
+  if (!categoryStats[q.catLabel]) categoryStats[q.catLabel] = {ok:0, total:0};
+  categoryStats[q.catLabel].total++;
+
+  if (selectedIndex === q.answer) {
+    score++;
+    categoryStats[q.catLabel].ok++;
+    fb.className = 'feedback show correct-fb';
+    fb.innerHTML = `<span class="feedback-icon">✅</span> Bonne réponse ! ${q.fb}`;
+  } else {
+    opts[selectedIndex].classList.add('wrong');
+    fb.className = 'feedback show wrong-fb';
+    fb.innerHTML = `<span class="feedback-icon">❌</span> Mauvaise réponse. ${q.fb}`;
+  }
+
+  document.getElementById('score-display').textContent = score;
+
+  const btnRow = document.querySelector('.btn-row');
+  btnRow.innerHTML = `<button class="btn btn-ghost" onclick="nextQuestion()">${current < shuffled.length - 1 ? '▶ SUIVANT' : '🏆 RÉSULTATS'}</button>`;
+}
+
+function nextQuestion() {
+  current++;
+  if (current >= shuffled.length) {
+    showResults();
+  } else {
+    selectedIndex = null;
+    renderQuestion();
+  }
+}
+
+function showResults() {
+  document.getElementById('quiz-area').style.display = 'none';
+  document.getElementById('progress-bar').style.width = '100%';
+
+  const pct = Math.round((score / shuffled.length) * 100);
+  const rs = document.getElementById('result-screen');
+
+  let emoji, label;
+  if (pct >= 90) { emoji = '🟡'; label = 'PERFECT — UNITY MASTER !'; }
+  else if (pct >= 70) { emoji = '😄'; label = 'BIEN JOUÉ — PRESQUE CERTIFIÉ !'; }
+  else if (pct >= 50) { emoji = '👻'; label = 'PAS MAL — RÉVISE ENCORE !'; }
+  else { emoji = '💀'; label = 'GAME OVER — RETOURNE CODER !'; }
+
+  document.getElementById('result-emoji').textContent = emoji;
+  document.getElementById('result-score-val').textContent = score + '/' + shuffled.length + ' (' + pct + '%)';
+  document.getElementById('result-label').textContent = label;
+
+  let breakdown = '';
+  for (const [cat, stat] of Object.entries(categoryStats)) {
+    const pctCat = Math.round((stat.ok / stat.total) * 100);
+    const col = pctCat >= 70 ? 'var(--correct)' : pctCat >= 50 ? 'var(--ghost-orange)' : 'var(--wrong)';
+    breakdown += `
+      <div class="breakdown-row">
+        <span class="breakdown-cat">${cat}</span>
+        <span class="breakdown-stat" style="color:${col}">${stat.ok}/${stat.total} — ${pctCat}%</span>
+      </div>`;
+  }
+  document.getElementById('result-breakdown').innerHTML = breakdown;
+
+  rs.style.display = 'block';
+}
+
+function restartQuiz() {
+  startQuiz();
+}
+
+startQuiz();
+</script>
+</body>
+</html>
